@@ -2,7 +2,44 @@ class PhotoChatApp {
   constructor() {
     this.photos = JSON.parse(localStorage.getItem('photos')) || [];
     this.messages = JSON.parse(localStorage.getItem('messages')) || [];
+    this.initDB();
     this.init();
+  }
+
+  initDB() {
+    // Initialize IndexedDB for better storage capacity
+    const request = indexedDB.open('PhotoChatDB', 1);
+    
+    request.onerror = () => {
+      console.log('IndexedDB not available, using localStorage only');
+    };
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('photos')) {
+        db.createObjectStore('photos', { keyPath: 'id' });
+      }
+    };
+    
+    request.onsuccess = (event) => {
+      this.db = event.target.result;
+      this.loadPhotosFromDB();
+    };
+  }
+
+  loadPhotosFromDB() {
+    if (!this.db) return;
+    
+    const transaction = this.db.transaction(['photos'], 'readonly');
+    const store = transaction.objectStore('photos');
+    const request = store.getAll();
+    
+    request.onsuccess = () => {
+      if (request.result.length > 0) {
+        this.photos = request.result.sort((a, b) => b.id - a.id);
+        this.displayPhotos();
+      }
+    };
   }
 
   init() {
@@ -50,7 +87,7 @@ class PhotoChatApp {
     document.getElementById('caption').value = '';
     document.getElementById('photoInput').value = '';
     document.photoData = null;
-    alert('Photo uploaded!');
+    alert('Photo uploaded and saved!');
   }
 
   sendMessage() {
@@ -122,7 +159,24 @@ class PhotoChatApp {
   }
 
   savePhotos() {
-    localStorage.setItem('photos', JSON.stringify(this.photos));
+    // Save to localStorage (with size limit handling)
+    try {
+      localStorage.setItem('photos', JSON.stringify(this.photos));
+    } catch(e) {
+      console.warn('localStorage full, clearing old photos');
+      this.photos = this.photos.slice(0, 10);
+      localStorage.setItem('photos', JSON.stringify(this.photos));
+    }
+    
+    // Also save to IndexedDB for better capacity
+    if (this.db) {
+      const transaction = this.db.transaction(['photos'], 'readwrite');
+      const store = transaction.objectStore('photos');
+      store.clear();
+      this.photos.forEach(photo => {
+        store.add(photo);
+      });
+    }
   }
 
   saveMessages() {
@@ -137,3 +191,21 @@ class PhotoChatApp {
 }
 
 const app = new PhotoChatApp();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
