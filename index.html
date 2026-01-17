@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Photo Chat App</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Socket.io for real-time updates -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -56,10 +58,27 @@
   </div>
 
   <script>
-    let photos = JSON.parse(localStorage.getItem('photos')) || [];
+    // Connect to Socket.io server
+    const socket = io();
+
+    let photos = [];
     let currentUser = localStorage.getItem('currentUser') || '';
-    let users = JSON.parse(localStorage.getItem('users')) || {};
+    let users = {};
     let following = JSON.parse(localStorage.getItem('following')) || {};
+
+    // Listen for real-time updates from server
+    socket.on('photosUpdated', (data) => {
+      photos = data;
+      showAllPhotos();
+    });
+
+    socket.on('usersUpdated', (data) => {
+      users = {};
+      data.forEach(user => {
+        users[user.username] = user;
+      });
+      displayUsers();
+    });
 
     function setUsername() {
       const username = document.getElementById('username').value.trim();
@@ -70,10 +89,9 @@
       currentUser = username;
       localStorage.setItem('currentUser', currentUser);
       
-      if (!users[currentUser]) {
-        users[currentUser] = { followers: 0, following: 0 };
-        localStorage.setItem('users', JSON.stringify(users));
-      }
+      // Notify server of new user
+      socket.emit('setUsername', currentUser);
+
       if (!following[currentUser]) {
         following[currentUser] = [];
         localStorage.setItem('following', JSON.stringify(following));
@@ -143,20 +161,23 @@
         return;
       }
       const caption = document.getElementById('caption').value.trim();
+      const photoId = Date.now();
       const photo = {
-        id: Date.now(),
+        id: photoId,
         image: window.photoData,
         caption: caption,
         timestamp: new Date().toLocaleString(),
         author: currentUser
       };
-      photos.unshift(photo);
-      localStorage.setItem('photos', JSON.stringify(photos));
+
+      // Send photo to server via Socket.io
+      socket.emit('uploadPhoto', photo);
+
       showAllPhotos();
       document.getElementById('caption').value = '';
       document.getElementById('photoInput').value = '';
       window.photoData = null;
-      alert('Photo uploaded!');
+      alert('Photo uploaded and shared with everyone!');
     }
 
     function showAllPhotos() {
@@ -182,14 +203,17 @@
         return;
       }
       
-      feed.innerHTML = photoList.map(photo => `
+      feed.innerHTML = photoList.map(photo => {
+        const isAuthorOnline = users[photo.author] ? '🟢 Online' : '⚫ Offline';
+        return `
         <div class="photo-post">
-          <div class="photo-author">By <strong>${photo.author}</strong></div>
+          <div class="photo-author">By <strong>${photo.author}</strong> <span class="status-indicator">${isAuthorOnline}</span></div>
           <img src="${photo.image}" alt="photo" class="photo-image" onclick="openImageModal(this.src)">
           ${photo.caption ? `<div class="photo-caption">${photo.caption}</div>` : ''}
           <div class="photo-meta">${photo.timestamp}</div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
     function displayUsers() {
@@ -203,14 +227,16 @@
         return;
       }
       
-      usersList.innerHTML = allUsers.map(user => `
+      usersList.innerHTML = allUsers.map(user => {
+        return `
         <div class="user-card">
-          <div class="user-name">${user}</div>
+          <div class="user-name">🟢 ${user}</div>
           <button class="btn-follow" onclick="${isFollowing(user) ? "unfollowUser('" + user + "')" : "followUser('" + user + "')"}">
             ${isFollowing(user) ? '✓ Following' : '+ Follow'}
           </button>
         </div>
-      `).join('');
+      `;
+      }).join('');
     }
 
     function openImageModal(imageSrc) {
