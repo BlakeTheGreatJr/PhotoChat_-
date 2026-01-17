@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photo Chat App</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📸 Photo Chat</h1>
+      <p>Share photos with everyone</p>
+      <div class="user-info">
+        <input type="text" id="username" placeholder="Your username" maxlength="20">
+        <button onclick="setUsername()" class="btn-set-user">Set Username</button>
+        <span id="currentUser" style="color: white; margin-left: 20px;"></span>
+      </div>
+    </header>
+
+    <div class="main-content">
+      <div class="upload-section">
+        <h2>Share a Photo</h2>
+        <div class="upload-box" onclick="document.getElementById('photoInput').click()">
+          <input type="file" id="photoInput" accept="image/*" style="display:none;">
+          <div class="upload-icon">📷</div>
+          <p>Click to upload a photo</p>
+        </div>
+        <div class="form-group">
+          <input type="text" id="caption" placeholder="Add a caption (optional)">
+        </div>
+        <button class="btn-upload" onclick="uploadPhoto()">Upload Photo</button>
+      </divstyle="margin-bottom: 20px;">
+        <button onclick="showAllPhotos()" class="btn-filter">All Photos</button>
+        <button onclick="showFollowingPhotos()" class="btn-filter">Following</button>
+      </div>
+      <div id="photoFeed" class="photo-feed"></div>
+    </div>
+
+    <div class="feed-section">
+      <h2>👥 Users</h2>
+      <div id="usersList" class="users-list
+    </div>
+
+    <div class="feed-section">
+      <h2>📺 Photo Feed</h2>
+      <div id="photoFeed" class="photo-feed"></div>
+    </div>
+  </div>
+
+  <div id="imageModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <button class="close-btn" onclick="closeImageModal()">✕</button>
+      <img id="modalImage" src="" alt="full size photo" class="modal-image">
+    </div>
+  </div>
+
+  <script>
+    let photos = JSON.parse(localStorage.getItem('photos')) || [];
+    let currentUser = localStorage.getItem('currentUser') || '';
+    let users = JSON.parse(localStorage.getItem('users')) || {};
+    let following = JSON.parse(localStorage.getItem('following')) || {};
+
+    function setUsername() {
+      const username = document.getElementById('username').value.trim();
+      if (!username) {
+        alert('Please enter a username');
+        return;
+      }
+      currentUser = username;
+      localStorage.setItem('currentUser', currentUser);
+      
+      if (!users[currentUser]) {
+        users[currentUser] = { followers: 0, following: 0 };
+        localStorage.setItem('users', JSON.stringify(users));
+      }
+      if (!following[currentUser]) {
+        following[currentUser] = [];
+        localStorage.setItem('following', JSON.stringify(following));
+      }
+      
+      updateUserDisplay();
+      document.getElementById('username').value = '';
+      alert('Username set to: ' + currentUser);
+    }
+
+    function updateUserDisplay() {
+      document.getElementById('currentUser').textContent = '👤 ' + currentUser;
+      displayUsers();
+    }
+
+    function followUser(username) {
+      if (!currentUser) {
+        alert('Please set your username first');
+        return;
+      }
+      if (username === currentUser) {
+        alert('You cannot follow yourself');
+        return;
+      }
+      
+      if (!following[currentUser]) {
+        following[currentUser] = [];
+      }
+      
+      if (!following[currentUser].includes(username)) {
+        following[currentUser].push(username);
+        localStorage.setItem('following', JSON.stringify(following));
+        alert('You are now following ' + username);
+        displayUsers();
+      }
+    }
+
+    function unfollowUser(username) {
+      if (following[currentUser]) {
+        following[currentUser] = following[currentUser].filter(u => u !== username);
+        localStorage.setItem('following', JSON.stringify(following));
+        displayUsers();
+      }
+    }
+
+    function isFollowing(username) {
+      return following[currentUser] && following[currentUser].includes(username);
+    }
+
+    function handlePhotoSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        window.photoData = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function uploadPhoto() {
+      if (!currentUser) {
+        alert('Please set your username first');
+        return;
+      }
+      if (!window.photoData) {
+        alert('Please select a photo first');
+        return;
+      }
+      const caption = document.getElementById('caption').value.trim();
+      const photo = {
+        id: Date.now(),
+        image: window.photoData,
+        caption: caption,
+        timestamp: new Date().toLocaleString(),
+        author: currentUser
+      };
+      photos.unshift(photo);
+      localStorage.setItem('photos', JSON.stringify(photos));
+      showAllPhotos();
+      document.getElementById('caption').value = '';
+      document.getElementById('photoInput').value = '';
+      window.photoData = null;
+      alert('Photo uploaded!');
+    }
+
+    function showAllPhotos() {
+      displayPhotos(photos);
+    }
+
+    function showFollowingPhotos() {
+      if (!currentUser) {
+        alert('Please set your username first');
+        return;
+      }
+      const followingList = following[currentUser] || [];
+      const filtered = photos.filter(p => followingList.includes(p.author));
+      displayPhotos(filtered);
+    }
+
+    function displayPhotos(photoList) {
+      const feed = document.getElementById('photoFeed');
+      if (!feed) return;
+      
+      if (photoList.length === 0) {
+        feed.innerHTML = '<div class="empty-message">No photos to display</div>';
+        return;
+      }
+      
+      feed.innerHTML = photoList.map(photo => `
+        <div class="photo-post">
+          <div class="photo-author">By <strong>${photo.author}</strong></div>
+          <img src="${photo.image}" alt="photo" class="photo-image" onclick="openImageModal(this.src)">
+          ${photo.caption ? `<div class="photo-caption">${photo.caption}</div>` : ''}
+          <div class="photo-meta">${photo.timestamp}</div>
+        </div>
+      `).join('');
+    }
+
+    function displayUsers() {
+      const usersList = document.getElementById('usersList');
+      if (!usersList) return;
+      
+      const allUsers = Object.keys(users).filter(u => u !== currentUser);
+      
+      if (allUsers.length === 0) {
+        usersList.innerHTML = '<div class="empty-message">No other users yet</div>';
+        return;
+      }
+      
+      usersList.innerHTML = allUsers.map(user => `
+        <div class="user-card">
+          <div class="user-name">${user}</div>
+          <button class="btn-follow" onclick="${isFollowing(user) ? "unfollowUser('" + user + "')" : "followUser('" + user + "')"}">
+            ${isFollowing(user) ? '✓ Following' : '+ Follow'}
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function openImageModal(imageSrc) {
+      const modal = document.getElementById('imageModal');
+      const modalImg = document.getElementById('modalImage');
+      modal.style.display = 'flex';
+      modalImg.src = imageSrc;
+    }
+
+    function closeImageModal() {
+      const modal = document.getElementById('imageModal');
+      modal.style.display = 'none';
+    }
+
+    document.getElementById('photoInput').addEventListener('change', handlePhotoSelect);
+    
+    document.addEventListener('click', function(e) {
+      const modal = document.getElementById('imageModal');
+      if (e.target === modal) {
+        closeImageModal();
+      }
+    });
+
+    if (currentUser) {
+      updateUserDisplay();
+    }
+    showAllPhotos();
+    displayUsers();
+  </script>
+</body>
+</html>
